@@ -1,0 +1,240 @@
+SELECT SUBSTR(DATAS.TRAN_DATE,1,4)||SUBSTR(DATAS.TRAN_DATE,6,2)                                      AS YYYYMM,
+       SUBSTR(DATAS.TRAN_DATE,6,2)                                                                   AS MM_AC,
+       SUBSTR(DATAS.TRAN_DATE,6,2)                                                                   AS MM,
+       CUST.TEAMS                                                                                    AS Team,
+       CUST.PB_RM_CODE                                                                               AS RM,
+       DATAS.CUS_ID_E                                                                                AS Cus_ID,
+       CUST.CUSTOMER_NAME                                                                            AS Cus_Name,
+       DATAS.TRAN_DATE                                                                               AS TXN_Date,
+       DATAS.ACCT_NO                                                                                 AS Acct_NBR,
+       CASE WHEN DATAS.PROD_TYPE = '1.STOCK' THEN '股票/ETF'                                               
+            WHEN DATAS.PROD_TYPE = '2.BOND'  THEN '債券'                                                   
+            WHEN DATAS.PROD_TYPE = '3.FUND'  THEN '基金'                                                   
+            WHEN DATAS.PROD_TYPE = '4.SN'    THEN 'SN'                                                     
+            WHEN DATAS.PROD_TYPE = '5.DCI'   THEN 'SI'                                                     
+            WHEN DATAS.PROD_TYPE = '6.SD'    THEN 'SI'                                                     
+       END                                                                                           AS Prod_TP_L,
+       CASE DATAS.PROD_TYPE WHEN '1.STOCK' THEN CASE SUBSTR(ISIN_CD,1,2) WHEN 'US' THEN '美股' 
+	                                                                     WHEN 'CN' THEN '陸股'
+                                                                         WHEN 'HK' THEN '港股'
+                                                                         WHEN 'JP' THEN '日股'
+                                                                         WHEN 'CA' THEN '加股'
+                                                                         WHEN 'TW' THEN '台股'
+                                                                         WHEN 'KY' THEN '港股'
+                                                                         WHEN 'GB' THEN '英股'	
+                                                                         WHEN 'DE' THEN '德股'																		 																		 
+                                                                         WHEN 'SG' THEN '新股'																		 
+                                                                         END                                                  
+                            WHEN '5.DCI'   THEN 'DCI'                                                
+                            WHEN '6.SD'    THEN 'SD'                                                 
+                            ELSE ''                                                                  
+       END                                                                                           AS Prod_TP_M,
+       ''                                                                                            AS Prod_TP_S,
+       CASE WHEN DATAS.TRAN_TYPE IN ('BUY',              --股票                                            
+                                     'STEX_BUY',         --債券、SN                                        
+                                     'BISS','BPS','BPSU' --基金                                            
+                                    ) THEN 'BUY'                                                          
+            WHEN DATAS.TRAN_TYPE IN ('SELL',             --股票                                            
+                                     'STEX_SELL'         --債券、SN                                        
+                                                         --基金                                            
+                                    ) THEN 'SELL'                                                         
+       END                                                                                           AS Deal_TP,
+       DATAS.FX_CRNCY                                                                                AS Cur_Prod,
+       DATAS.ISIN_CD                                                                                 AS Prod_ID,
+       DATAS.PROD_NAME                                                                               AS Prod_Name,
+       DATAS.ISIN_CD                                                                                 AS ISIN_Code,
+       DATAS.FX_CRNCY                                                                                AS Cur_TXN,
+       DATAS.PRICE                                                                                   AS Price,
+       DATAS.UNIT                                                                                    AS Units,
+       TWD.TFR_RATE                                                                                  AS FX_Rate, 
+       CASE WHEN DATAS.PROD_TYPE IN ('2.BOND',                                                       
+                                     '4.SN'                                                          
+                                    ) THEN CAST(DATAS.UNIT * DATAS.PRICE / 100 AS DECIMAL(32,6))
+            ELSE CAST(DATAS.UNIT * DATAS.PRICE AS DECIMAL(32,6))                                     
+       END                                                                                           AS FX_AMT, 
+       CAST(FX_AMT * FX_RATE AS DECIMAL(32,6))                                                       AS NTD_AMT, 
+       LEDGER.TWD_REV                                                                                AS Rev_Bef, 
+       LEDGER.TWD_REV                                                                                AS Rev_Aft, 
+       LEDGER.TWD_REV                                                                                AS Rev_AC, 
+       0                                                                                             AS Rev_DB, 
+       LEDGER.TWD_REV                                                                                AS Rev_All, 
+       LEDGER.FEE                                                                                    AS Rev_USD,
+       'TXN手收'                                                                                     AS Rev_Type,
+       'AVQ'                                                                                         AS Plat,
+       ''                                                                                            AS TOGETHER,
+       '0'                                                                                           AS Trust_F,
+       '2'                                                                                           AS OS_F,
+       SUBSTR(DATAS.SETT_DATE,1,4)                                                                   AS YYYY,
+       SUBSTR(DATAS.SETT_DATE,1,4)                                                                   AS YYYY_AC,
+       CASE SUBSTR(DATAS.SETT_DATE,6,2) WHEN '12' THEN CAST(SUBSTR(DATAS.SETT_DATE,1,4) AS INT)  + 1
+                                        ELSE  CAST(SUBSTR(DATAS.SETT_DATE,1,4) AS INT)
+       END                                                                                           AS YYYY_Per,
+       COALESCE(REFER.REFER_RM_CODE,'')                                                              AS PBDB_RM,
+       TRIM('SG')                                                                           		 AS BU_IND,
+	   TRIM(CUST.CUS_TP)                                                                			 AS Cus_TP,
+
+       '605'                                                                                         AS Bus_Code,
+       ''                                                                                            AS Refer_F,
+       ''                                                                                            AS DB_year,
+       ''                                                                                            AS Trans_RM_year,
+       ''                                                                                            AS PDBD_year,
+       ''                                                                                            AS Rev_per,
+       ''                                                                                            AS Memo,
+       CAST(DATE - EXTRACT(DAY FROM DATE) AS DATE FORMAT 'YYYY-MM-DD')                               AS DataDate,
+	   DATAS.TXN_NBR                                                                                 AS TXN_NBR,
+	   SETT_DATE
+  FROM (--債券
+        SELECT CAST('2.BOND' AS VARCHAR(50))                                   						 AS PROD_TYPE,
+               PROD.TXN_REFERENCE_NBR                                           					 AS TRAN_NO,
+               PROD.CUSTOMER_NBR                                               						 AS CUS_ID_E,
+               PROD.PORTFOLIO_NBR                                               					 AS ACCT_NO,
+               PROD.DATA_DATE                                                   					 AS DATA_DATE,
+               PROD.TRADE_DATE                                                  					 AS TRAN_DATE,
+               PROD.SETTLEMENT_DATE                                             					 AS SETT_DATE,
+               PROD.TXN_TYPE_CODE                                               					 AS TRAN_TYPE,
+               PROD.PRODUCT_NAME                                                					 AS PROD_NAME,
+               PROD.ISIN_CODE                                                   					 AS ISIN_CD,
+               PROD.SETTLEMENT_CURRENCY_CODE                                    					 AS FX_CRNCY,
+               ABS(PROD.BOND_FACE_AMT)                                          					 AS UNIT,
+               PROD.TXN_PRICE                                                   					 AS PRICE,
+               ABS(PROD.ACCRUED_INT_AMT)                                        					 AS ACCRUED_INT,
+               ABS(PROD.BROKER_NET_AMT)                                         					 AS COST_AMT,
+               ABS(PROD.SETTLEMENT_AMT)                                         					 AS INCOME_AMT,
+               CASE WHEN TRAN_TYPE = 'STEX_BUY'  THEN INCOME_AMT - COST_AMT							 
+                    WHEN TRAN_TYPE = 'STEX_SELL' THEN COST_AMT - INCOME_AMT END 					 AS FEE,
+			   PROD.TXN_REFERENCE_NBR                                           					 AS TXN_NBR	    					
+          FROM VP_ENCRYPT_SGD.EVENT_AVL_BOND_TXN_SGD PROD
+         WHERE PROD.REVERSAL_STATUS_CODE <> 'YES'
+         
+         UNION 
+        
+        --股票
+        SELECT '1.STOCK'                                                   							 AS PROD_TYPE,
+               PROD.TXN_REFERENCE_NBR                                      							 AS TRAN_NO,
+               PROD.CUSTOMER_NBR                                           							 AS CUS_ID_E,
+               PROD.PORTFOLIO_NBR                                          							 AS ACCT_NO,
+               PROD.DATA_DATE                                              							 AS DATA_DATE,
+               PROD.SETTLEMENT_DATE                                        							 AS TRAN_DATE,
+               PROD.SETTLEMENT_DATE                                        							 AS SETT_DATE,
+               PROD.TXN_TYPE_CODE                                          							 AS TRAN_TYPE,
+               PROD.PRODUCT_NAME                                           							 AS PROD_NAME,
+               PROD.PRODUCT_CODE                                           							 AS ISIN_CD,
+               PROD.SETTLEMENT_CURRENCY_CODE                               							 AS FX_CRNCY,
+               ABS(PROD.QUANTITY)                                          							 AS UNIT,
+               PROD.STOCK_PRICE                                            							 AS PRICE,
+               0                                                           							 AS ACCRUED_INT,
+               ABS(PROD.TXN_AMT)                                           							 AS COST_AMT,
+               ABS(PROD.SETTLEMENT_AMT)                                    							 AS INCOME_AMT, 
+               CASE WHEN TRAN_TYPE = 'BUY'  THEN INCOME_AMT - COST_AMT	   							 
+                    WHEN TRAN_TYPE = 'SELL' THEN COST_AMT - INCOME_AMT END 							 AS FEE,
+			   PROD.TXN_REFERENCE_NBR                                      							 AS TXN_NBR	     
+          FROM VP_ENCRYPT_SGD.EVENT_AVL_STOCK_TXN_SGD PROD
+         WHERE PROD.REVERSAL_STATUS_CODE <> 'YES'
+
+         UNION
+        
+        --基金
+        SELECT '3.FUND'                      														 AS PROD_TYPE,
+               PROD.TXN_REFERENCE_NBR        														 AS TRAN_NO,
+               PROD.CUSTOMER_NBR             														 AS CUS_ID_E,
+               PROD.PORTFOLIO_NBR            														 AS ACCT_NO,
+               PROD.DATA_DATE                														 AS DATA_DATE,
+               PROD.TRADE_DATE               														 AS TRAN_DATE,
+               PROD.SETTLEMENT_DATE          														 AS SETT_DATE,
+               PROD.TXN_TYPE_CODE            														 AS TRAN_TYPE,
+               PROD.PRODUCT_NAME             														 AS PROD_NAME,
+               PROD.FUND_ID                  														 AS ISIN_CD,
+               PROD.SETTLEMENT_CURRENCY_CODE 														 AS FX_CRNCY,
+               ABS(PROD.TXN_UNITS_AMT)       														 AS UNIT,
+               PROD.TXN_PRICE                														 AS PRICE,
+               0                             														 AS ACCRUED_INT,
+               ABS(PROD.BROKER_NET_AMT)      														 AS COST_AMT,
+               ABS(PROD.SETTLEMENT_AMT)      														 AS INCOME_AMT,
+               PROD.PB_MARGIN_FEE            														 AS FEE,
+			   PROD.TXN_REFERENCE_NBR        														 AS TXN_NBR	               
+          FROM VP_ENCRYPT_SGD.EVENT_AVL_MF_TXN_SGD PROD
+         WHERE PROD.REVERSAL_STATUS_CODE <> 'YES'
+         
+         UNION
+         
+        --SN
+        SELECT '4.SN'                                                           					 AS PROD_TYPE,
+               PROD.TXN_REFERENCE_NBR                                           					 AS TRAN_NO,
+               PROD.CUSTOMER_NBR                                                					 AS CUS_ID_E,
+               PROD.PORTFOLIO_NBR                                               					 AS ACCT_NO,
+               PROD.DATA_DATE                                                   					 AS DATA_DATE,
+               PROD.TRADE_DATE                                                  					 AS TRAN_DATE,
+               PROD.SETTLEMENT_DATE                                             					 AS SETT_DATE,
+               PROD.TXN_TYPE_CODE                                               					 AS TRAN_TYPE,
+               PROD.PRODUCT_NAME                                                					 AS PROD_NAME,
+               PROD.ISIN_CODE                                                   					 AS ISIN_CD,
+               PROD.SETTLEMENT_CURRENCY_CODE                                    					 AS FX_CRNCY,
+               ABS(PROD.FACE_AMT)                                               					 AS UNIT,
+               PROD.TXN_PRICE                                                   					 AS PRICE,
+               0                                                                					 AS ACCRUED_INT,
+               ABS(PROD.BROKER_NET_AMT)                                         					 AS COST_AMT,
+               ABS(PROD.SETTLEMENT_AMT)                                         					 AS INCOME_AMT,
+               CASE WHEN TRAN_TYPE = 'STEX_BUY'  THEN INCOME_AMT - COST_AMT							 
+                    WHEN TRAN_TYPE = 'STEX_SELL' THEN COST_AMT - INCOME_AMT END 					 AS FEE,               
+			   PROD.TXN_REFERENCE_NBR                                           					 AS TXN_NBR	
+          FROM VP_ENCRYPT_SGD.EVENT_AVL_STN_TXN_SGD PROD
+         WHERE PROD.REVERSAL_STATUS_CODE <> 'YES'
+       ) DATAS LEFT JOIN PB_TEMP.CUS_BASE CUST
+                      ON CUST.CUSTOMER_ID = DATAS.CUS_ID_E
+               LEFT JOIN PB_TEMP.CLOSING_RATE_CALENDAR_DAY TWD
+                      ON TWD.TFR_CURRENCY_CODE = 'TWD'
+                     AND TWD.RATE_DATE         = DATAS.TRAN_DATE
+                     AND TWD.CURRENCY_CODE     = DATAS.FX_CRNCY
+               LEFT JOIN PB_TEMP.CLOSING_RATE_CALENDAR_DAY USD
+                      ON USD.TFR_CURRENCY_CODE = 'USD'
+                     AND USD.RATE_DATE         = DATAS.TRAN_DATE
+                     AND USD.CURRENCY_CODE     = DATAS.FX_CRNCY
+               LEFT JOIN PB_TEMP.INNER_REFER REFER
+                      ON REFER.CUSTOMER_ID = DATAS.CUS_ID_E
+			   LEFT JOIN (SELECT TXN_SEQ_NBR                                                                                         AS TXN_NBR
+                            ,MAX(POSTING_DATE)                                                                                       AS AC_DATE
+                            ,MAX(ENTRY.SUB_GL_CODE)                                                                                  AS SUB_GL_CODE
+                            ,SUM(ENTRY.FX_TXN_AMT * 
+                            CASE ENTRY.CREDIT_DEBIT_CODE WHEN 'CR' THEN  1                                                            
+                             WHEN 'DR' THEN -1                                                            
+                               END)                                                                                                  AS FEE
+   
+                            ,SUM(ROUND(ENTRY.FX_TXN_AMT * 
+                                       CAST(TWD.TFR_RATE AS DECIMAL(18,6)),0) * 
+                                       CASE ENTRY.CREDIT_DEBIT_CODE WHEN 'CR' THEN  1
+                                                                    WHEN 'DR' THEN -1
+                                       END)                                                                                          AS TWD_REV
+                            ,SUM(CASE WHEN SUBSTR(ENTRY.SUB_GL_CODE,1,1) = '4' THEN 0
+                                      ELSE ENTRY.FX_TXN_AMT
+                                  END * CASE ENTRY.CREDIT_DEBIT_CODE WHEN 'CR' THEN  1                                                            
+                                                                     WHEN 'DR' THEN -1                                                            
+                                        END)                                                                                         AS FX_REV
+                            ,SUM(ROUND(CASE WHEN SUBSTR(ENTRY.SUB_GL_CODE,1,1) = '1' THEN 0
+                                            ELSE ENTRY.FX_TXN_AMT
+                                       END / CAST(USD.TFR_RATE AS DECIMAL(18,6)),2) * CASE ENTRY.CREDIT_DEBIT_CODE WHEN 'CR' THEN  1
+                                                                                                                   WHEN 'DR' THEN -1
+                                                                                      END)                                           AS USD_REV                                                                                                              
+                                                 FROM (SELECT *
+                                                       FROM VP_ENCRYPT_SGD.FINANCE_AVL_LEDGER_SGD) ENTRY
+                                                       LEFT JOIN (SELECT CURRENCY_CODE
+                                                       ,RATE_DATE
+                                                       ,TFR_RATE
+                                                       FROM PB_TEMP.EXC_RATE_CALENDAR_DAY
+                                                       WHERE TFR_CURRENCY_CODE = 'TWD') TWD
+                                                       ON TWD.CURRENCY_CODE = ENTRY.CURRENCY_CODE
+                                                       AND TWD.RATE_DATE     = CAST(ENTRY.POSTING_DATE AS DATE FORMAT'YYYYMMDD')
+                                                       LEFT JOIN (SELECT RATE_DATE
+                                                       ,TFR_RATE
+                                                       FROM PB_TEMP.HKD_RATE_ESTIMATE
+                                                       WHERE CURRENCY_CODE = 'USD') USD
+                                                       ON USD.RATE_DATE + 1 = CAST(ENTRY.POSTING_DATE AS DATE FORMAT'YYYYMMDD')
+
+                                                WHERE ENTRY.ENTRY_TYPE_CODE = 'STEX'
+                                                AND ENTRY.SUB_GL_CODE IN ('420990504'
+                                                                           ,'420990904'
+                                                                           ,'420990905'
+                                                                           ,'420990907')
+												--AND SUBSTR(ENTRY.POSTING_DATE,1,6) = '?YYYYMM'
+                                                AND SUBSTR(ENTRY.POSTING_DATE,1,4)||SUBSTR(ENTRY.POSTING_DATE,6,2) ='?YYYYMM'
+                                                GROUP BY TXN_NBR) LEDGER
+             ON LEDGER.TXN_NBR = DATAS.TXN_NBR
